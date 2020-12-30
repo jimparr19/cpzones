@@ -47,7 +47,7 @@ analysis_layout = [
                     dash_table.DataTable(
                         id='selected_data_table',
                         columns=[
-                            {'id': 'duration_seconds', 'name': 'time interval (s)', 'type': 'numeric',
+                            {'id': 'duration_seconds', 'name': 'duration (s)', 'type': 'numeric',
                              'format': Format(precision=3)},
                             {'id': 'average_speed', 'name': 'average speed (m/s)', 'type': 'numeric',
                              'format': Format(precision=3)},
@@ -66,18 +66,20 @@ analysis_layout = [
             ),
             dbc.Row(
                 children=[
-                    dbc.Col(id="analysis_message", md=12)
+                    dbc.Col(id="analysis_message_number", md=6),
+                    dbc.Col(id="analysis_message_monotonic", md=6)
                 ]
             ),
             dbc.Row(
                 children=[
                     dbc.Col(md=6),
                     dbc.Col(
-                        dbc.Button("Get power zones", id="analysis_btn", color="primary", size="lg",
+                        dbc.Button("Calculate power zones", id="analysis_btn", color="light", size="lg",
                                    block=True, disabled=True),
                         md=12
                     )
-                ]
+                ],
+                className='mb-3'
             ),
         ],
     ),
@@ -87,23 +89,34 @@ analysis_layout = [
             dbc.Row(
                 children=[
                     dbc.Col(
+                        children=[
+                            dbc.Toast(
+                                [html.H1(id='cp_value')],
+                                header="Critical Power (watts)",
+                                style={'max-width': '100%'}
+                            )
+                        ],
+                        md=6),
+                    dbc.Col(
+                        children=[
+                            dbc.Toast(
+                                [html.H1(id='wprime_value')],
+                                header="W' (joules)",
+                                style={'max-width': '100%'}
+                            )
+                        ],
+                        md=6)
+                ]
+            ),
+            dbc.Row(
+                children=[
+                    dbc.Col(
                         id='analysis_output',
                         md=12
                     ),
                 ],
                 className='mt-3 mb-3'
-            ),
-            dbc.Row(
-                children=[
-                    dbc.Col(
-                        dcc.Loading(id="track_analysis_plot")
-                    )
-                ]
             )
         ]
-    ),
-    html.Div(
-        id='hidden_data',
-        style={'display': 'none'}
     )
 ]

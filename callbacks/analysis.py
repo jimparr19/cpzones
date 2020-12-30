@@ -6,7 +6,6 @@ import pandas as pd
 import dash_table
 
 import dash_core_components as dcc
-import dash_html_components as html
 import dash_bootstrap_components as dbc
 
 from dash.dependencies import Input, Output, State
@@ -16,6 +15,8 @@ from plots.analysis import analysis_data_plot, analysis_plot_config, analysis_da
 
 from fitparse import FitFile
 from collections import namedtuple
+
+from dash_table.Format import Format
 
 FitData = namedtuple('FitData', ['time', 'distance', 'speed', 'power', 'elevation', 'latitude', 'longitude'])
 
@@ -47,13 +48,11 @@ def parse_contents(contents, filename):
             longitude_degrees = [i * (180 / 2 ** 31) if i is not None else None for i in longitude]
             data = FitData(time=time, distance=distance, speed=speed, power=power, elevation=elevation,
                            latitude=latitude_degrees, longitude=longitude_degrees)
-
-        # TODO: What if 'fit' is not in filename?
+        else:
+            return None
     except Exception as e:
         print(e)
-        return html.Div([
-            'There was an error processing this file.'
-        ])
+        return None
     return data
 
 
@@ -66,14 +65,17 @@ def parse_contents(contents, filename):
         State('upload-data', 'filename')
     ])
 def update_output_regression(file_contents, file_name):
-    plot_object = None
-
+    error_message = dbc.Alert("There was an error processing this file.", color="danger")
     if file_contents is not None:
         data = parse_contents(file_contents, file_name)
-        figure = analysis_data_plot(analysis_data=data)
-        plot_object = dcc.Graph(figure=figure, config=analysis_plot_config, id='plot_analysis_data')
-
-    return plot_object
+        if data:
+            figure = analysis_data_plot(analysis_data=data)
+            plot_object = dcc.Graph(figure=figure, config=analysis_plot_config, id='plot_analysis_data')
+            return plot_object
+        else:
+            return error_message
+    else:
+        return None
 
 
 @app.callback(
@@ -82,7 +84,8 @@ def update_output_regression(file_contents, file_name):
         Output('analysis_btn', 'disabled'),
         Output('selected_data_histogram', 'children'),
         Output('selected_data_table_container', 'is_open'),
-        Output('analysis_message', 'children')
+        Output('analysis_message_number', 'children'),
+        Output('analysis_message_monotonic', 'children')
     ],
     [
         Input('plot_analysis_data', 'selectedData')
@@ -118,30 +121,35 @@ def display_selected_data(selected_data, figure, rows):
             data_is_monotonic = pd.DataFrame(rows).sort_values(by='duration_seconds')[
                 'average_power'].is_monotonic_decreasing
 
-    message = None if data_is_monotonic else dbc.Alert("Power must be decreasing with increasing duration", color="warning")
+    number_message = None if len(rows) > 2 else dbc.Alert("Select a minimum of 3 intervals.", color="warning")
+    monotonic_message = None if data_is_monotonic else dbc.Alert("Power must decrease with increasing duration.",
+                                                                 color="warning")
     disabled_btn = False if len(rows) > 2 and data_is_monotonic else True
     open_container = True if rows else False
 
-    return rows, disabled_btn, histogram, open_container, message
+    return rows, disabled_btn, histogram, open_container, number_message, monotonic_message
 
 
 def create_power_zones(data):
     data_df = pd.DataFrame(data)
     coef = np.polyfit(data_df.duration_seconds, data_df.duration_seconds * data_df.average_power, 1)
     cp = coef[0]
+    wprime = coef[1]
     power_zones_df = pd.DataFrame({
         'zone': ['Z1', 'Z2', 'Z3', 'Z4', 'Z5'],
         'lower power': [cp * x for x in [0.65, 0.80, 0.9, 1, 1.15]],
         'upper power': [cp * x for x in [0.80, 0.9, 1, 1.15, 3]],
         'description': ['Easy', 'Moderate', 'Threshold', 'Interval', 'Repetition']
     })
-    return power_zones_df
+    return power_zones_df, cp, wprime
 
 
 @app.callback(
     [
         Output('analysis_output', 'children'),
-        Output("analysis_results_container", "is_open")
+        Output("analysis_results_container", "is_open"),
+        Output("cp_value", "children"),
+        Output("wprime_value", "children")
     ],
     [
         Input('analysis_btn', 'n_clicks')
@@ -151,13 +159,20 @@ def create_power_zones(data):
     ])
 def display_analysis_output(n_clicks, data):
     if n_clicks:
-        power_zones_df = create_power_zones(data)
+        power_zones_df, cp, wprime = create_power_zones(data)
         analysis_output = dash_table.DataTable(
             id='power_zones_table',
-            columns=[{"name": i, "id": i} for i in power_zones_df.columns],
+            columns=[
+                {'id': 'zone', 'name': 'zone'},
+                {'id': 'lower power', 'name': 'lower power (watts)', 'type': 'numeric',
+                 'format': Format(precision=3)},
+                {'id': 'upper power', 'name': 'upper power (watts)', 'type': 'numeric',
+                 'format': Format(precision=3)},
+                {'id': 'description', 'name': 'description'},
+            ],
             data=power_zones_df.to_dict('records'),
             style_header={'fontWeight': 'bold'},
         )
-        return analysis_output, True
+        return analysis_output, True, np.round(cp), np.round(wprime)
     else:
-        return None, False
+        return None, False, None, None

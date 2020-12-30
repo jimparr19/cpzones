@@ -1,5 +1,4 @@
 import numpy as np
-# import hashlib
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 import plotly.express as px
@@ -7,7 +6,8 @@ import plotly.express as px
 analysis_plot_config = {
     'modeBarButtonsToRemove': ['toImage', 'lasso2d', 'autoScale2d', 'toggleSpikelines', 'hoverClosestCartesian',
                                'hoverCompareCartesian'],
-    'displaylogo': False}
+    'displaylogo': False,
+    'displayModeBar': True}
 
 colors = px.colors.qualitative.Plotly
 power_color = colors[0]
@@ -55,7 +55,6 @@ def analysis_data_plot(analysis_data):
     figure.update_yaxes(title_text="speed (m/s)", row=2, col=1)
     figure.update_xaxes(title_text="time", row=n_rows, col=1)
     figure.update_yaxes(title_text="power (watts)", row=3, col=1)
-    # figure.update_layout(uirevision=hashlib.md5(f'{analysis_data}'.encode()).hexdigest())
     figure.update_layout(height=600)
 
     return figure
@@ -75,24 +74,3 @@ def analysis_data_histogram_plot(speed, power):
     figure.update_layout(height=350, bargap=0.1, margin=dict(t=20))
     return figure
 
-# def track_cda_regression_plot(x_meas, y_meas, x_est, y_est):
-#     # figure = go.Figure(data=go.Scatter(x=x_trial, y=y_trial, mode='markers'))
-#     figure = go.Figure()
-#     figure.add_trace(
-#         go.Scatter(x=x_meas,
-#                    y=y_meas,
-#                    name='trials',
-#                    mode="markers", )
-#     )
-#
-#     figure.add_trace(
-#         go.Scatter(x=x_est,
-#                    y=y_est,
-#                    name='estimation',
-#                    mode="lines", )
-#     )
-#
-#     figure.update_xaxes(title_text="aerodynamic resistance (watts per m\u00B2)")
-#     figure.update_yaxes(title_text="mechanical power (watts)")
-#
-#     return figure
