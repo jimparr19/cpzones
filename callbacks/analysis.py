@@ -11,7 +11,7 @@ import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 
 from app import app
-from plots.analysis import analysis_data_plot, analysis_plot_config, analysis_data_histogram_plot
+from plots.analysis import analysis_data_plot, analysis_plot_config, analysis_data_histogram_plot, analysis_regression_plot
 
 from fitparse import FitFile
 from collections import namedtuple
@@ -44,9 +44,10 @@ def parse_contents(contents, filename):
                 longitude.append(values.get('position_long', None))
                 power.append(values.get('power', None))
 
+            speed_kph = [i * 3.6 if i is not None else None for i in speed]
             latitude_degrees = [i * (180 / 2 ** 31) if i is not None else None for i in latitude]
             longitude_degrees = [i * (180 / 2 ** 31) if i is not None else None for i in longitude]
-            data = FitData(time=time, distance=distance, speed=speed, power=power, elevation=elevation,
+            data = FitData(time=time, distance=distance, speed=speed_kph, power=power, elevation=elevation,
                            latitude=latitude_degrees, longitude=longitude_degrees)
         else:
             return None
@@ -57,7 +58,10 @@ def parse_contents(contents, filename):
 
 
 @app.callback(
-    Output('loading_power_data', 'children'),
+    [
+        Output('loading_power_data', 'children'),
+        Output('hidden_data', 'value')
+    ],
     [
         Input('upload-data', 'contents')
     ],
@@ -71,17 +75,18 @@ def update_output_regression(file_contents, file_name):
         if data:
             figure = analysis_data_plot(analysis_data=data)
             plot_object = dcc.Graph(figure=figure, config=analysis_plot_config, id='plot_analysis_data')
-            return plot_object
+            return plot_object, data._asdict()
         else:
-            return error_message
+            return error_message, None
     else:
-        return None
+        return None, None
 
 
 @app.callback(
     [
         Output('selected_data_table', 'data'),
         Output('analysis_btn', 'disabled'),
+        Output('analysis_btn', 'color'),
         Output('selected_data_histogram', 'children'),
         Output('selected_data_table_container', 'is_open'),
         Output('analysis_message_number', 'children'),
@@ -106,13 +111,24 @@ def display_selected_data(selected_data, figure, rows):
             speed = [value for i, value in enumerate(figure['data'][1]['y']) if i in index]
             power = [value for i, value in enumerate(figure['data'][2]['y']) if i in index]
 
-            interval = (pd.to_datetime(time).max() - pd.to_datetime(time).min()).total_seconds()
+            datetime = pd.to_datetime(pd.Series(time))
+            interval_start = datetime.min()
+            interval_end = datetime.max()
+            interval = (interval_end - interval_start).total_seconds()
             mean_speed = np.mean(speed)
             mean_power = np.mean(power)
 
-            row = {'duration_seconds': interval,
+            # compute corrected power which produces the total energy during this period
+            time_delta = [x.total_seconds() for x in datetime.diff()]
+            total_energy = np.nansum(np.array(time_delta) * np.array(power))
+
+            row = {'interval_start': interval_start,
+                   'interval_end': interval_end,
+                   'duration_seconds': interval,
                    'average_speed': mean_speed,
-                   'average_power': mean_power}
+                   'average_power': mean_power,
+                   'total_energy': total_energy}
+
             rows.append(row)
 
             figure = analysis_data_histogram_plot(speed, power)
@@ -125,14 +141,15 @@ def display_selected_data(selected_data, figure, rows):
     monotonic_message = None if data_is_monotonic else dbc.Alert("Power must decrease with increasing duration.",
                                                                  color="warning")
     disabled_btn = False if len(rows) > 2 and data_is_monotonic else True
+    disabled_color = 'success' if len(rows) > 2 and data_is_monotonic else 'danger'
     open_container = True if rows else False
 
-    return rows, disabled_btn, histogram, open_container, number_message, monotonic_message
+    return rows, disabled_btn, disabled_color, histogram, open_container, number_message, monotonic_message
 
 
-def create_power_zones(data):
-    data_df = pd.DataFrame(data)
-    coef = np.polyfit(data_df.duration_seconds, data_df.duration_seconds * data_df.average_power, 1)
+def create_power_zones(selected_data, data):
+    select_data_df = pd.DataFrame(selected_data)
+    coef = np.polyfit(select_data_df.duration_seconds,  select_data_df.total_energy, 1)
     cp = coef[0]
     wprime = coef[1]
     power_zones_df = pd.DataFrame({
@@ -148,6 +165,7 @@ def create_power_zones(data):
     [
         Output('analysis_output', 'children'),
         Output("analysis_results_container", "is_open"),
+        Output('analysis_regression', 'children'),
         Output("cp_value", "children"),
         Output("wprime_value", "children")
     ],
@@ -155,11 +173,18 @@ def create_power_zones(data):
         Input('analysis_btn', 'n_clicks')
     ],
     [
-        State("selected_data_table", "data")
+        State("selected_data_table", "data"),
+        State('hidden_data', 'value')
     ])
-def display_analysis_output(n_clicks, data):
+def display_analysis_output(n_clicks, selected_data, data):
     if n_clicks:
-        power_zones_df, cp, wprime = create_power_zones(data)
+
+        power_zones_df, cp, wprime = create_power_zones(selected_data, data)
+
+        figure = analysis_regression_plot(selected_data, cp, wprime)
+        # regression = dcc.Graph(figure=figure, id='regression_plot', config={'displayModeBar': False})
+        regression = dcc.Graph(figure=figure, id='regression_plot')
+
         analysis_output = dash_table.DataTable(
             id='power_zones_table',
             columns=[
@@ -173,6 +198,6 @@ def display_analysis_output(n_clicks, data):
             data=power_zones_df.to_dict('records'),
             style_header={'fontWeight': 'bold'},
         )
-        return analysis_output, True, np.round(cp), np.round(wprime)
+        return analysis_output, True, regression, np.round(cp), np.round(wprime)
     else:
-        return None, False, None, None
+        return None, False, None, None, None

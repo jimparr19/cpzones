@@ -47,12 +47,17 @@ analysis_layout = [
                     dash_table.DataTable(
                         id='selected_data_table',
                         columns=[
+                            {'id': 'interval_start', 'name': 'interval start', 'type': 'datetime'},
+                            {'id': 'interval_end', 'name': 'interval end', 'type': 'datetime'},
                             {'id': 'duration_seconds', 'name': 'duration (s)', 'type': 'numeric',
-                             'format': Format(precision=3)},
-                            {'id': 'average_speed', 'name': 'average speed (m/s)', 'type': 'numeric',
+                             'format': Format(precision=4)},
+                            {'id': 'average_speed', 'name': 'average speed (km/h)', 'type': 'numeric',
                              'format': Format(precision=3)},
                             {'id': 'average_power', 'name': 'average power (watts)', 'type': 'numeric',
                              'format': Format(precision=4)},
+                            {'id': 'total_energy', 'name': 'energy (joules)', 'type': 'numeric',
+                             'format': Format(precision=6)}
+                            ,
                         ],
                         data=[],
                         style_header={'fontWeight': 'bold'},
@@ -66,16 +71,20 @@ analysis_layout = [
             ),
             dbc.Row(
                 children=[
-                    dbc.Col(id="analysis_message_number", md=6),
-                    dbc.Col(id="analysis_message_monotonic", md=6)
+                    dbc.Col(id="analysis_message_number", md=12)
+                ]
+            ),
+            dbc.Row(
+                children=[
+                    dbc.Col(id="analysis_message_monotonic", md=12)
                 ]
             ),
             dbc.Row(
                 children=[
                     dbc.Col(md=6),
                     dbc.Col(
-                        dbc.Button("Calculate power zones", id="analysis_btn", color="light", size="lg",
-                                   block=True, disabled=True),
+                        dbc.Button("Calculate power zones", id="analysis_btn", color="danger", size="lg",
+                                   outline=True, block=True, disabled=True),
                         md=12
                     )
                 ],
@@ -86,6 +95,12 @@ analysis_layout = [
     dbc.Collapse(
         id='analysis_results_container',
         children=[
+            dbc.Row(
+                dbc.Col(
+                    id='analysis_regression',
+                    md=12
+                )
+            ),
             dbc.Row(
                 children=[
                     dbc.Col(
@@ -118,5 +133,9 @@ analysis_layout = [
                 className='mt-3 mb-3'
             )
         ]
+    ),
+    html.Div(
+        id='hidden_data',
+        style={'display': 'none'}
     )
 ]
